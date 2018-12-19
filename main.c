@@ -70,7 +70,10 @@ void InitUnigramTable() {
 }
 
 // Reads a single word from a file, assuming space + tab + EOL to be word boundaries
-void ReadWord(char *word, FILE *fin) {
+void  ReadWord(char *word, FILE *fin) {
+    for(int i=strlen(word)-1;i>=0;i--){
+        word[i]='\0';
+    }
     int a = 0, ch;
     while (!feof(fin)) {
         ch = fgetc(fin);
@@ -389,14 +392,16 @@ void LoadTypeFromTypeFile() {
     }
     while (1) {
         ReadWord(word, fin);
-        if (feof(fin)) break;
+        if (feof(fin)) {
+            break;
+        }
         if (strcmp(word, "\n") == 0) {
             continue;
         }
         ReadWord(type, fin);
         i = SearchVocab(word);
         node2type[i] = atoi(type);
-//  printf("node:%s(%d) type:%d\n", word, i, atoi(type));
+//        printf("node:%s(%d) type:%d\n", word, i, atoi(type));
     }
     fclose(fin);
 }
@@ -429,7 +434,8 @@ void *TrainModelThread(void *id) {
     long long rw_length = 0;
     char item[MAX_STRING];
     char rw[MAX_RW_LENGTH][MAX_STRING], edge_seq[MAX_RW_LENGTH][MAX_STRING];
-    long long word_count = 0, last_word_count = 0, node_seq[MAX_RW_LENGTH];
+    long long word_count = 0, last_word_count = 0;
+    long long node_seq[MAX_RW_LENGTH];
     long long edge_count = 0;
     long long lx, ly, lr, c, target, context, label;
     unsigned long long next_random = (long long)id;
@@ -448,7 +454,10 @@ void *TrainModelThread(void *id) {
         exit(1);
     }
     fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
-
+    printf("id is :%d \n", id);
+    printf("file size is :%lld \n", file_size);
+    printf("num_threads is :%d \n", num_threads);
+    printf("file_size/num_threads * id == %lld \n", file_size / (long long)num_threads * (long long)id);
     while (1) {
         if (word_count - last_word_count > 10000) {
             word_count_actual += word_count - last_word_count;
@@ -464,22 +473,24 @@ void *TrainModelThread(void *id) {
             alpha = starting_alpha * (1 - word_count_actual / (real)(train_words + 1));
             if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
         }
+        for(int i= sizeof(item);i>=0;i--) item[i]='\0';
 
         if (rw_length == 0) {
             // read a random walk
             if (feof(fi) == 1) break;
             while (1) {
                 ReadWord(item, fi);
-                if (feof(fi) == 1) break;
+                if (feof(fi) == 1) {
+                    printf("tmp_walk_fname is end! \n");
+                    break;
+                }
                 if (strcmp(item, "\n") == 0) {
                     break;
                 }
                 strcpy(rw[rw_length], item);
                 rw_length++;
-
             }
             if (rw_length <= 2) {rw_length = 0; node_length = 0; edge_length = 0; continue;}
-
             // split random walk to node and edge sequence
             is_node = 1;
             node_length = 0;
@@ -513,7 +524,6 @@ void *TrainModelThread(void *id) {
                 next_random = next_random * (unsigned long long)25214903917 + 11;
                 cur_win = next_random % window; // random a window length for this sentence
             }
-
             for (w=1; w<=cur_win; w++) {
                 if (a+w >= node_length) continue;
                 target = node_seq[a];
@@ -678,7 +688,7 @@ void *TrainModelThread(void *id) {
     fclose(fi);
     free(ex);
     free(er);
-    pthread_exit(NULL);
+//    pthread_exit(NULL);
 }
 
 void TrainModel() {
@@ -696,13 +706,18 @@ void TrainModel() {
     LoadTypeFromTypeFile();
     if (output_file[0] == 0) return;
     InitNet();
-
     InitUnigramTable();
-
     start = clock();
-    for (a = 0; a < num_threads; a++) pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
+//    for (a = 0; a < num_threads; a++){
+//        printf("a value is %d\n", a);
+//        int err = pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
+//        if(err != 0){
+//            printf("can't create thread: %s\n",strerror(err));
+//            return ;
+//        }
+//    }
+    TrainModelThread((void *)(long long)0);
     for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-
     fo = fopen(output_file, "wb");
     if (fo == NULL) {
         fprintf(stderr, "Cannot open %s: permission denied\n", output_file);
