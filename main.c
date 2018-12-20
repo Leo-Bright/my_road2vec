@@ -454,7 +454,7 @@ void *TrainModelThread(void *id) {
         exit(1);
     }
     fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
-    printf("id is :%d \n", id);
+    printf("id is :%lld \n", (long long)id);
     printf("file size is :%lld \n", file_size);
     printf("num_threads is :%d \n", num_threads);
     printf("file_size/num_threads * id == %lld \n", file_size / (long long)num_threads * (long long)id);
