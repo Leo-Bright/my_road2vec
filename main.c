@@ -143,7 +143,7 @@ int MpVocabCompare(const void *a, const void *b) {
 void SortMpVocab() {
     int a, size;
     unsigned int hash;
-    qsort(&mp_vocab[1], mp_vocab_size - 1, sizeof(struct vocab_mp), MpVocabCompare);
+    qsort(&mp_vocab[0], mp_vocab_size - 1, sizeof(struct vocab_mp), MpVocabCompare);
     for (a = 0; a < mp_vocab_hash_size; a++) mp_vocab_hash[a] = -1;
     size = mp_vocab_size;
     train_mps = 0;
@@ -234,13 +234,13 @@ void DestroyVocab() {
 
 // Sorts the vocabulary by frequency using word counts
 void SortVocab() {
-    int a, size;
+    int size;
     unsigned int hash;
-    qsort(&vocab[1], vocab_size - 1, sizeof(struct vocab_word), VocabCompare);
-    for (a = 0; a < vocab_hash_size; a++) vocab_hash[a] = -1;
+    qsort(&vocab[0], vocab_size - 1, sizeof(struct vocab_word), VocabCompare);
+    for (int a = 0; a < vocab_hash_size; a++) vocab_hash[a] = -1;
     size = vocab_size;
     train_words = 0;
-    for (a = 0; a < size; a++) {
+    for (int a = 0; a < size; a++) {
         // Hash will be re-computed, as after the sorting it is not actual
         hash=GetWordHash(vocab[a].word);
         while (vocab_hash[hash] != -1) hash = (hash + 1) % vocab_hash_size;
@@ -249,7 +249,7 @@ void SortVocab() {
     }
     vocab = (struct vocab_word *)realloc(vocab, (vocab_size + 1) * sizeof(struct vocab_word));
     // Allocate memory for the binary tree construction
-    for (a = 0; a < vocab_size; a++) {
+    for (int a = 0; a < vocab_size; a++) {
         vocab[a].code = (char *)calloc(MAX_CODE_LENGTH, sizeof(char));
         vocab[a].point = (int *)calloc(MAX_CODE_LENGTH, sizeof(int));
     }
@@ -397,21 +397,27 @@ void LoadTypeFromTypeFile() {
 }
 
 void InitNet() {
-    long long a, b;
-    a = posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));
+    posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));
     if (syn0 == NULL) {printf("Memory allocation failed\n"); exit(1);}
-    for (b = 0; b < layer1_size; b++) for (a = 0; a < vocab_size; a++)
+    for (long long b = 0; b < layer1_size; b++) {
+        for (long long a = 0; a < vocab_size; a++) {
             syn0[a * layer1_size + b] = (rand() / (real)RAND_MAX - 0.5) / layer1_size;
-
-    a = posix_memalign((void **)&syn1neg, 128, (long long)vocab_size * layer1_size * sizeof(real));
+        }
+    }
+    posix_memalign((void **)&syn1neg, 128, (long long)vocab_size * layer1_size * sizeof(real));
     if (syn1neg == NULL) {printf("Memory allocation failed\n"); exit(1);}
-    for (b = 0; b < layer1_size; b++) for (a = 0; a < vocab_size; a++)
+    for (long long b = 0; b < layer1_size; b++) {
+        for (long long a = 0; a < vocab_size; a++) {
             syn1neg[a * layer1_size + b] = (rand() / (real)RAND_MAX - 0.5) / layer1_size;
-
-    a = posix_memalign((void **)&synmp, 128, (long long)mp_vocab_size * layer1_size * sizeof(real));
+        }
+    }
+    posix_memalign((void **)&synmp, 128, (long long)mp_vocab_size * layer1_size * sizeof(real));
     if (synmp == NULL) {printf("Memory allocation failed\n"); exit(1);}
-    for (b = 0; b < layer1_size; b++) for (a = 0; a < mp_vocab_size; a++)
+    for (long long b = 0; b < layer1_size; b++) {
+        for (long long a = 0; a < mp_vocab_size; a++) {
             synmp[a * layer1_size + b] = (rand() / (real)RAND_MAX) / layer1_size;
+        }
+    }
 }
 
 void DestroyNet() {
