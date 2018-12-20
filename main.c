@@ -34,16 +34,16 @@ struct vocab_mp *mp_vocab;
 int binary = 0, debug_mode = 2, window = 3, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1;
 int sigmoid_reg = 0;
 int *vocab_hash, *mp_vocab_hash, *node2type;
-long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 100;
+long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 64;
 long long mp_vocab_max_size = 1000, mp_vocab_size = 0;
 long long train_words = 0, word_count_actual = 0, file_size = 0, classes = 0;
 long long train_mps = 0;
 real alpha = 0.025, starting_alpha;
 real beta = 0.9;
-real *syn0, *syn1, *syn1neg, *synmp, *expTable;
+real *syn0, *syn1neg, *synmp, *expTable;
 clock_t start;
 
-int hs = 1, negative = 5;
+int negative = 0;
 const int table_size = 1e8;
 int *table;
 
@@ -162,13 +162,6 @@ void SortMpVocab() {
     }
 }
 
-int ReadEdgeIndex(FILE *fin) {
-    char edge[MAX_STRING];
-    ReadWord(edge, fin);
-    if (feof(fin)) return -1;
-    return SearchMpVocab(edge);
-}
-
 // Returns hash value of a word
 int GetWordHash(char *word) {
     unsigned long long a, hash = 0;
@@ -263,17 +256,16 @@ void SortVocab() {
 }
 
 void LearnVocabFromTrainFile() {
-    int is_node = 1;
     char word[MAX_STRING];
     FILE *fin;
-    long long a, i;
-    for (a = 0; a < vocab_hash_size; a++) vocab_hash[a] = -1;
+    for (long long a = 0; a < vocab_hash_size; a++) vocab_hash[a] = -1;
     fin = fopen(train_file, "rb");
     if (fin == NULL) {
         printf("ERROR: training data file not found!\n");
         exit(1);
     }
     vocab_size = 0;
+    int is_node = 1;
     while (1) {
         ReadWord(word, fin);
         if (strcmp(word, "\n") == 0 || !is_node) {
@@ -281,7 +273,6 @@ void LearnVocabFromTrainFile() {
             continue;
         }
         is_node = 0;
-
         if (feof(fin)) break;
         train_words++;
         if ((debug_mode > 1) && (train_words % 100000 == 0)) {
@@ -289,9 +280,9 @@ void LearnVocabFromTrainFile() {
             fflush(stdout);
         }
 //  printf("word %s\n", word);
-        i = SearchVocab(word);
+        long long i = SearchVocab(word);
         if (i == -1) {
-            a = AddWordToVocab(word);
+            long long a = AddWordToVocab(word);
             vocab[a].cn = 1;
         } else vocab[i].cn++;
     }
@@ -308,22 +299,21 @@ void LearnVocabFromTrainFile() {
 }
 
 void LearnMpVocabFromTrainFile() {
-    int is_edge = 0;
     char edge[MAX_STRING];
     char path[MAX_RW_LENGTH][MAX_STRING];
     char *mp = "";
     FILE *fin;
-    long long a, i, j, k, ith=0;
-    for (a = 0; a < mp_vocab_hash_size; a++) mp_vocab_hash[a] = -1;
+    for (long long a = 0; a < mp_vocab_hash_size; a++) mp_vocab_hash[a] = -1;
     fin = fopen(train_file, "rb");
     if (fin == NULL) {
         printf("ERROR: training data file not found!\n");
         exit(1);
     }
     mp_vocab_size = 0;
+    long long ith=0;
+    int is_edge = 0;
     while (1) {
         ReadWord(edge, fin);
-
         if (feof(fin)) break;
         if (strcmp(edge, "\n") != 0) {
             if (!is_edge) {
@@ -341,9 +331,9 @@ void LearnMpVocabFromTrainFile() {
 //  }
 //  printf("\n");
 
-        for (j=0; j<ith; j++) {
+        for (long long j=0; j<ith; j++) {
             mp = path[j];
-            for (k=0; k<window; k++) {
+            for (long long k=0; k<window; k++) {
                 if (j+k >= ith) break;
                 if (k != 0) {
                     strcat(mp, path[j+k]);
@@ -355,9 +345,9 @@ void LearnMpVocabFromTrainFile() {
                     printf("%lldK%c", train_mps/ 1000, 13);
                     fflush(stdout);
                 }
-                i = SearchMpVocab(mp);
+                long long i = SearchMpVocab(mp);
                 if (i == -1) {
-                    a = AddMpToMpVocab(mp);
+                    long long a = AddMpToMpVocab(mp);
                     mp_vocab[a].cn = 1;
                 } else mp_vocab[i].cn++;
             }
@@ -367,7 +357,7 @@ void LearnMpVocabFromTrainFile() {
     }
 
     SortMpVocab();
-    for (a = 0; a < mp_vocab_size; a++) {
+    for (long long a = 0; a < mp_vocab_size; a++) {
         printf("%lld meta-path:%s %lld\n", a, mp_vocab[a].mp, mp_vocab[a].cn);
     }
     if (debug_mode > 0) {
@@ -692,7 +682,6 @@ void *TrainModelThread(void *id) {
 }
 
 void TrainModel() {
-    long a, b;
     FILE *fo, *fo_mp;
     pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
     if (pt == NULL) {
@@ -717,7 +706,7 @@ void TrainModel() {
 //        }
 //    }
     TrainModelThread((void *)(long long)0);
-    for (a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
     fo = fopen(output_file, "wb");
     if (fo == NULL) {
         fprintf(stderr, "Cannot open %s: permission denied\n", output_file);
@@ -725,26 +714,36 @@ void TrainModel() {
     }
     printf("\nsave node vectors\n");
     fprintf(fo, "%lld %lld\n", vocab_size, layer1_size);
-    for (a = 0; a < vocab_size; a++) {
+    for (long a = 0; a < vocab_size; a++) {
         if (vocab[a].word != NULL) {
             fprintf(fo, "%s ", vocab[a].word);
         }
-        if (binary) for (b = 0; b < layer1_size; b++) fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fo);
-        else for (b = 0; b < layer1_size; b++) fprintf(fo, "%lf ", syn0[a * layer1_size + b]);
+        if (binary){
+            for (long b = 0; b < layer1_size; b++) {
+                fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fo);
+            }
+        }
+        else {
+            for (long b = 0; b < layer1_size; b++) {
+                fprintf(fo, "%lf ", syn0[a * layer1_size + b]);
+            }
+        }
         fprintf(fo, "\n");
     }
     fo_mp = fopen(mp_output_file, "wb");
-    if (fo == NULL) {
+    if (fo_mp == NULL) {
         fprintf(stderr, "Cannot open %s: permission denied\n", mp_output_file);
         exit(1);
     }
     printf("save mp vectors\n");
     fprintf(fo_mp, "%lld %lld\n", mp_vocab_size, layer1_size);
-    for (a = 0; a < mp_vocab_size; a++) {
+    for (long a = 0; a < mp_vocab_size; a++) {
         if (mp_vocab[a].mp != NULL) {
             fprintf(fo_mp, "%s ", mp_vocab[a].mp);
         }
-        for (b = 0; b < layer1_size; b++) fprintf(fo_mp, "%lf ", synmp[a * layer1_size + b]);
+        for (long b = 0; b < layer1_size; b++) {
+            fprintf(fo_mp, "%lf ", synmp[a * layer1_size + b]);
+        }
         fprintf(fo_mp, "\n");
     }
     fclose(fo);
@@ -773,11 +772,11 @@ int main(int argc, char **argv) {
         printf("Options:\n");
         printf("Parameters for training:\n");
         printf("\t-size <int>\n");
-        printf("\t\tSet size of vectors; default is 100\n");
+        printf("\t\tSet size of vectors dimension; default is 64\n");
         printf("\t-train <file>\n");
-        printf("\t\tUse text data from <file> to train the model\n");
+        printf("\t\tUse text data from <file> to train the model, format of line is '<node_id> <edge_class>'\n");
         printf("\t-type_file <file>\n");
-        printf("\t\tNode type file\n");
+        printf("\t\tNode type file, format of line is '<node_id> <node_type>'\n");
         printf("\t-alpha <float>\n");
         printf("\t\tSet the starting learning rate; default is 0.025\n");
         printf("\t-beta <float>\n");
@@ -797,7 +796,7 @@ int main(int argc, char **argv) {
         printf("\t-no_circle <1/0>\n");
         printf("\t\tSet to agoid circles in paths when preparing training data (default 1: avoid)\n");
         printf("\nExamples:\n");
-        printf("./hin2vec -train data.txt -output vec.txt -size 200 -window 5 -negative 5\n\n");
+        printf("./road2vec -train data.txt -type_file tyep.txt -output vec.txt -output_mp mp.txt -size 128 -window 5 -negative 5\n\n");
         return 0;
     }
     output_file[0] = 0;
