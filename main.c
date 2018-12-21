@@ -396,21 +396,21 @@ void LoadTypeFromTypeFile() {
 }
 
 void InitNet() {
-    posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));
+    posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));//syn0：存储wx权重矩阵
     if (syn0 == NULL) {printf("Memory allocation failed\n"); exit(1);}
     for (long long b = 0; b < layer1_size; b++) {
         for (long long a = 0; a < vocab_size; a++) {
             syn0[a * layer1_size + b] = (rand() / (real)RAND_MAX - 0.5) / layer1_size;
         }
     }
-    posix_memalign((void **)&syn1neg, 128, (long long)vocab_size * layer1_size * sizeof(real));
+    posix_memalign((void **)&syn1neg, 128, (long long)vocab_size * layer1_size * sizeof(real));//syn1neg：？没用到
     if (syn1neg == NULL) {printf("Memory allocation failed\n"); exit(1);}
     for (long long b = 0; b < layer1_size; b++) {
         for (long long a = 0; a < vocab_size; a++) {
             syn1neg[a * layer1_size + b] = (rand() / (real)RAND_MAX - 0.5) / layer1_size;
         }
     }
-    posix_memalign((void **)&synmp, 128, (long long)mp_vocab_size * layer1_size * sizeof(real));
+    posix_memalign((void **)&synmp, 128, (long long)mp_vocab_size * layer1_size * sizeof(real));//synmp：meta_path权重矩阵=wr_relationship// ？
     if (synmp == NULL) {printf("Memory allocation failed\n"); exit(1);}
     for (long long b = 0; b < layer1_size; b++) {
         for (long long a = 0; a < mp_vocab_size; a++) {
@@ -442,17 +442,17 @@ void *TrainModelThread(void *id) {
     real *er = (real *)calloc(layer1_size, sizeof(real));
     real sigmoid = 0;
     FILE *fi = fopen(train_file, "rb");
-    int is_node = 1;
-    int has_circle = 0;
+    int is_node = 1; //1 = 上一次不是node
+    int has_circle = 0;// 是否出现回环
     if (fi == NULL) {
         fprintf(stderr, "no such file or directory: %s", train_file);
         exit(1);
     }
-    fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET);
-    printf("id is :%lld \n", (long long)id);
-    printf("file size is :%lld \n", file_size);
-    printf("num_threads is :%d \n", num_threads);
-    printf("file_size/num_threads * id == %lld \n", file_size / (long long)num_threads * (long long)id);
+    fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET); //多线程读文件的位置定位 （id为是线程id）
+//    printf("id is :%lld \n", (long long)id);
+//    printf("file size is :%lld \n", file_size);
+//    printf("num_threads is :%d \n", num_threads);
+//    printf("file_size/num_threads * id == %lld \n", file_size / (long long)num_threads * (long long)id);
     while (1) {
         if (word_count - last_word_count > 10000) {
             word_count_actual += word_count - last_word_count;
@@ -468,10 +468,10 @@ void *TrainModelThread(void *id) {
             alpha = starting_alpha * (1 - word_count_actual / (real)(train_words + 1));
             if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
         }
-        for(int i= sizeof(item);i>=0;i--) item[i]='\0';
+        for(int i= sizeof(item);i>=0;i--) item[i]='\0'; //清空操作，为保证node id读取不会错乱（原因：node ID位数不同）
 
         if (rw_length == 0) {
-            // read a random walk
+            // read a random walk （read a sequence）
             if (feof(fi) == 1) break;
             while (1) {
                 ReadWord(item, fi);
@@ -483,7 +483,7 @@ void *TrainModelThread(void *id) {
                     break;
                 }
                 strcpy(rw[rw_length], item);
-                rw_length++;
+                rw_length++; //一条有sequence有多少个元素（node+edge cla）
             }
             if (rw_length <= 2) {rw_length = 0; node_length = 0; continue;}
             // split random walk to node and edge sequence
@@ -491,7 +491,7 @@ void *TrainModelThread(void *id) {
             node_length = 0;
             edge_length = 0;
             if (rw_length % 2 == 1) {a=0;} else {a=1;}
-            for (; a < rw_length; a++) {
+            for (; a < rw_length; a++) { //把sequecne里的node id 和edge type 分开并替换成索引，准备node的one-hot向量
                 if (is_node) {
                     word = SearchVocab(rw[a]);
                     word_count++;
@@ -509,12 +509,13 @@ void *TrainModelThread(void *id) {
 
             rw_length = 0;
         }
-        if (feof(fi)) break;
+        if (feof(fi)) break; //已经读完所有training file
 
         //why we should break at here
         if (word_count >= train_words / num_threads) break;
 
         // learning
+        // node_length为node_seq的大小，node_seq存储了一行random walk中node的索引
         for (a=0; a<node_length; a++) {
             cur_win = window;
             if (static_win == 0) {
@@ -523,8 +524,8 @@ void *TrainModelThread(void *id) {
             }
             for (w=1; w<=cur_win; w++) {
                 if (a+w >= node_length) continue;
-                target = node_seq[a];
-                context = node_seq[a+w];
+                target = node_seq[a];//x
+                context = node_seq[a+w];//y
 
                 //check circles
                 if (no_circle == 1) {
@@ -553,9 +554,7 @@ void *TrainModelThread(void *id) {
                         if (context == target || context == node_seq[a+w]) continue;
                         label = 0;
                     }
-
-                    // training of a data
-                    lx = target * layer1_size;
+                    lx =target * layer1_size;//layer1_size为维度，定位到Wx中，关于x的embedding的存储起始位置
                     ly = context * layer1_size;
                     lr = mp_index * layer1_size;
                     for (c = 0; c < layer1_size; c++) {
@@ -569,12 +568,12 @@ void *TrainModelThread(void *id) {
                             else if (synmp[c + lr] < -MAX_EXP) continue;
                             else f += syn0[c + lx] * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
                         } else {
-                            if (synmp[c + lr] >= 0) f += syn0[c + lx] * syn0[c + ly];
+                            if (synmp[c + lr] >= 0) f += syn0[c + lx] * syn0[c + ly];//syn0是存储Wx的内存空间（点乘操作）
                         }
                     }
                     if (f > MAX_EXP) g = (label - 1) * alpha;
                     else if (f < -MAX_EXP) g = (label - 0) * alpha;
-                    else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
+                    else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;//寻找一个与exptalbe中f最近的一个点的sigmoid值并计算出梯度
 
                     g = g * beta;
 
@@ -696,14 +695,14 @@ void TrainModel() {
         fprintf(stderr, "cannot allocate memory for threads\n");
         exit(1);
     }
-    printf("Starting training using file %s\n", train_file);
+    printf("Starting training using file %s\n", train_file); //node sequence
     starting_alpha = alpha;
-    LearnVocabFromTrainFile();
-    LearnMpVocabFromTrainFile();
-    LoadTypeFromTypeFile();
+    LearnVocabFromTrainFile(); // 从输入的node sequence 里提取node的信息
+    LearnMpVocabFromTrainFile();//
+    LoadTypeFromTypeFile();//提取node type
     if (output_file[0] == 0) return;
     InitNet();
-    InitUnigramTable();
+    InitUnigramTable(); //一元表，负采样
     start = clock();
 //    for (a = 0; a < num_threads; a++){
 //        printf("a value is %d\n", a);
@@ -713,16 +712,16 @@ void TrainModel() {
 //            return ;
 //        }
 //    }
-    TrainModelThread((void *)(long long)0);
+    TrainModelThread((void *)(long long)0);// 0 线程id,单线程
     for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
-    fo = fopen(output_file, "wb");
+    fo = fopen(output_file, "wb");//判断参数是否有输出文件路径
     if (fo == NULL) {
         fprintf(stderr, "Cannot open %s: permission denied\n", output_file);
         exit(1);
     }
     printf("\nsave node vectors\n");
     fprintf(fo, "%lld %lld\n", vocab_size, layer1_size);
-    for (long a = 0; a < vocab_size; a++) {
+    for (long a = 0; a < vocab_size; a++) { //保存 node embedding
         if (vocab[a].word != NULL) {
             fprintf(fo, "%s ", vocab[a].word);
         }
