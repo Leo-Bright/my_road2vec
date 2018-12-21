@@ -372,9 +372,8 @@ void LoadTypeFromTypeFile() {
     char word[MAX_STRING];
     char type[MAX_STRING];
     FILE *fin;
-    long long a;
     int i;
-    for (a = 0; a < vocab_hash_size; a++) node2type[a] = -1;
+    for (long long a = 0; a < vocab_hash_size; a++) node2type[a] = -1;
     fin = fopen(type_file, "rb");
     if (fin == NULL) {
         printf("ERROR: type data file (%s) not found!\n", type_file);
@@ -476,7 +475,7 @@ void *TrainModelThread(void *id) {
             if (feof(fi) == 1) break;
             while (1) {
                 ReadWord(item, fi);
-                if (feof(fi) == 1) {
+                if (feof(fi)) {
                     printf("tmp_walk_fname is end! \n");
                     break;
                 }
@@ -486,7 +485,7 @@ void *TrainModelThread(void *id) {
                 strcpy(rw[rw_length], item);
                 rw_length++;
             }
-            if (rw_length <= 2) {rw_length = 0; node_length = 0; edge_length = 0; continue;}
+            if (rw_length <= 2) {rw_length = 0; node_length = 0; continue;}
             // split random walk to node and edge sequence
             is_node = 1;
             node_length = 0;
@@ -511,6 +510,8 @@ void *TrainModelThread(void *id) {
             rw_length = 0;
         }
         if (feof(fi)) break;
+
+        //why we should break at here
         if (word_count >= train_words / num_threads) break;
 
         // learning
@@ -557,9 +558,10 @@ void *TrainModelThread(void *id) {
                     lx = target * layer1_size;
                     ly = context * layer1_size;
                     lr = mp_index * layer1_size;
-                    for (c = 0; c < layer1_size; c++) ex[c] = 0;
-                    for (c = 0; c < layer1_size; c++) er[c] = 0;
-
+                    for (c = 0; c < layer1_size; c++) {
+                        ex[c] = 0;
+                        er[c] = 0;
+                    }
                     f = 0;
                     for (c = 0; c < layer1_size; c++) {
                         if (sigmoid_reg) {
