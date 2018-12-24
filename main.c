@@ -690,11 +690,11 @@ void *TrainModelThread(void *id) {
 
 void TrainModel() {
     FILE *fo, *fo_mp;
-    pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
-    if (pt == NULL) {
-        fprintf(stderr, "cannot allocate memory for threads\n");
-        exit(1);
-    }
+//    pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
+//    if (pt == NULL) {
+//        fprintf(stderr, "cannot allocate memory for threads\n");
+//        exit(1);
+//    }
     printf("Starting training using file %s\n", train_file); //node sequence
     starting_alpha = alpha;
     LearnVocabFromTrainFile(); // 从输入的node sequence 里提取node的信息
@@ -713,7 +713,7 @@ void TrainModel() {
 //        }
 //    }
     TrainModelThread((void *)(long long)0);// 0 线程id,单线程
-    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+//    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
     fo = fopen(output_file, "wb");//判断参数是否有输出文件路径
     if (fo == NULL) {
         fprintf(stderr, "Cannot open %s: permission denied\n", output_file);
