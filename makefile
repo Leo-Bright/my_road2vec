@@ -3,7 +3,7 @@ BIN_DIR=.
 
 CC = gcc
 #The -Ofast might not work with older versions of gcc; in that case, use -O2
-CFLAGS = -lm -pthread -O2 -Wall -funroll-loops -Wno-unused-result
+CFLAGS = -lm -pthread -O2 -Wall -funroll-loops -Wno-unused-result -std=c99
 
 all: road2vec
 
