@@ -756,7 +756,7 @@ void TrainModel() {
     fclose(fo);
     fclose(fo_mp);
     free(table);
-    free(pt);
+//    free(pt);
     DestroyVocab();
 }
 
