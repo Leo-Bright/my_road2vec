@@ -608,77 +608,77 @@ void *TrainModelThread(void *id) {
                 }
 
                 //Learn by same node type relationship
-                target = node_seq[a];
-                context = node_seq[a+w];
-                mp_index = 0;
-
-                next_random = next_random * (unsigned long long)25214903917 + 11;
-                for (d = 0; d < negative + 1; d++) {
-                    if (d == 0) {
-                        label = 0;
-                        if (node2type[target] == node2type[context]) label = 1;
-                        // negative sampling
-                    } else {
-                        next_random = next_random * (unsigned long long)25214903917 + 11;
-                        context = table[(next_random >> 16) % table_size];
-                        if (context == 0) context = next_random % (vocab_size - 1) + 1;
-                        if (context == target || context == node_seq[a+w]) continue;
-                        label = 0;
-                        if (node2type[target] == node2type[context]) label = 1;
-                    }
-
-                    // training of a data
-                    lx = target * layer1_size;
-                    ly = context * layer1_size;
-                    lr = mp_index * layer1_size;
-                    for (c = 0; c < layer1_size; c++) ex[c] = 0;
-                    for (c = 0; c < layer1_size; c++) er[c] = 0;
-
-                    f = 0;
-                    for (c = 0; c < layer1_size; c++) {
-                        if (sigmoid_reg) {
-                            if (synmp[c + lr] > MAX_EXP) f += syn0[c + lx] * syn0[c + ly];
-                            else if (synmp[c + lr] < -MAX_EXP) continue;
-                            else f += syn0[c + lx] * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        } else {
-                            if (synmp[c + lr] >= 0) f += syn0[c + lx] * syn0[c + ly];
-                        }
-                    }
-                    if (f > MAX_EXP) g = (label - 1) * alpha;
-                    else if (f < -MAX_EXP) g = (label - 0) * alpha;
-                    else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
-
-                    g = g * (1.0 - beta);
-
-                    // update
-                    for (c = 0; c < layer1_size; c++) {
-                        if (sigmoid_reg) {
-                            if (synmp[c + lr] > MAX_EXP) ex[c] = g * syn0[c + ly];
-                            else if (synmp[c + lr] < -MAX_EXP) continue;
-                            else ex[c] = g * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        } else {
-                            if (synmp[c + lr] >= 0) ex[c] = g * syn0[c + ly];
-                        }
-                    }
-                    for (c = 0; c < layer1_size; c++) {
-                        f = synmp[c + lr];
-                        if (f > MAX_EXP || f < -MAX_EXP) continue;
-                        sigmoid = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        er[c] = g * syn0[c + lx] * syn0[c + ly] * sigmoid * (1-sigmoid);
-                    }
-                    for (c = 0; c < layer1_size; c++) {
-                        if (sigmoid_reg) {
-                            if (synmp[c + lr] > MAX_EXP) syn0[c + ly] += g * syn0[c + lx];
-                            else if (synmp[c + lr] < -MAX_EXP) continue;
-                            else syn0[c + ly] += g * syn0[c + lx] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
-                        } else {
-                            if (synmp[c + lr] >= 0) syn0[c + ly] += g * syn0[c + lx];
-                        }
-                    }
-                    for (c = 0; c < layer1_size; c++) syn0[c + lx] += ex[c];
-
-                    if (is_deepwalk == 0) {for (c = 0; c < layer1_size; c++) synmp[c + lr] += er[c];}
-                }
+//                target = node_seq[a];
+//                context = node_seq[a+w];
+//                mp_index = 0;
+//
+//                next_random = next_random * (unsigned long long)25214903917 + 11;
+//                for (d = 0; d < negative + 1; d++) {
+//                    if (d == 0) {
+//                        label = 0;
+//                        if (node2type[target] == node2type[context]) label = 1;
+//                        // negative sampling
+//                    } else {
+//                        next_random = next_random * (unsigned long long)25214903917 + 11;
+//                        context = table[(next_random >> 16) % table_size];
+//                        if (context == 0) context = next_random % (vocab_size - 1) + 1;
+//                        if (context == target || context == node_seq[a+w]) continue;
+//                        label = 0;
+//                        if (node2type[target] == node2type[context]) label = 1;
+//                    }
+//
+//                    // training of a data
+//                    lx = target * layer1_size;
+//                    ly = context * layer1_size;
+//                    lr = mp_index * layer1_size;
+//                    for (c = 0; c < layer1_size; c++) ex[c] = 0;
+//                    for (c = 0; c < layer1_size; c++) er[c] = 0;
+//
+//                    f = 0;
+//                    for (c = 0; c < layer1_size; c++) {
+//                        if (sigmoid_reg) {
+//                            if (synmp[c + lr] > MAX_EXP) f += syn0[c + lx] * syn0[c + ly];
+//                            else if (synmp[c + lr] < -MAX_EXP) continue;
+//                            else f += syn0[c + lx] * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        } else {
+//                            if (synmp[c + lr] >= 0) f += syn0[c + lx] * syn0[c + ly];
+//                        }
+//                    }
+//                    if (f > MAX_EXP) g = (label - 1) * alpha;
+//                    else if (f < -MAX_EXP) g = (label - 0) * alpha;
+//                    else g = (label - expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))]) * alpha;
+//
+//                    g = g * (1.0 - beta);
+//
+//                    // update
+//                    for (c = 0; c < layer1_size; c++) {
+//                        if (sigmoid_reg) {
+//                            if (synmp[c + lr] > MAX_EXP) ex[c] = g * syn0[c + ly];
+//                            else if (synmp[c + lr] < -MAX_EXP) continue;
+//                            else ex[c] = g * syn0[c + ly] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        } else {
+//                            if (synmp[c + lr] >= 0) ex[c] = g * syn0[c + ly];
+//                        }
+//                    }
+//                    for (c = 0; c < layer1_size; c++) {
+//                        f = synmp[c + lr];
+//                        if (f > MAX_EXP || f < -MAX_EXP) continue;
+//                        sigmoid = expTable[(int)((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        er[c] = g * syn0[c + lx] * syn0[c + ly] * sigmoid * (1-sigmoid);
+//                    }
+//                    for (c = 0; c < layer1_size; c++) {
+//                        if (sigmoid_reg) {
+//                            if (synmp[c + lr] > MAX_EXP) syn0[c + ly] += g * syn0[c + lx];
+//                            else if (synmp[c + lr] < -MAX_EXP) continue;
+//                            else syn0[c + ly] += g * syn0[c + lx] * expTable[(int)((synmp[c + lr] + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2))];
+//                        } else {
+//                            if (synmp[c + lr] >= 0) syn0[c + ly] += g * syn0[c + lx];
+//                        }
+//                    }
+//                    for (c = 0; c < layer1_size; c++) syn0[c + lx] += ex[c];
+//
+//                    if (is_deepwalk == 0) {for (c = 0; c < layer1_size; c++) synmp[c + lr] += er[c];}
+//                }
             }
         }
     }
@@ -712,6 +712,31 @@ void TrainModel() {
 //            return ;
 //        }
 //    }
+    printf("\nsave tmp node vectors\n");
+    FILE *fotmp;
+    fotmp = fopen("../node2vec_tmp.txt", "wb");//判断参数是否有输出文件路径
+    if (fotmp == NULL) {
+        fprintf(stderr, "Cannot open output_tmp: permission denied\n");
+        exit(1);
+    }
+    fprintf(fotmp, "%lld %lld\n", vocab_size, layer1_size);
+    for (long a = 0; a < vocab_size; a++) { //保存 node embedding
+        if (vocab[a].word != NULL) {
+            fprintf(fotmp, "%s ", vocab[a].word);
+        }
+        if (binary){
+            for (long b = 0; b < layer1_size; b++) {
+                fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fotmp);
+            }
+        }
+        else {
+            for (long b = 0; b < layer1_size; b++) {
+                fprintf(fotmp, "%lf ", syn0[a * layer1_size + b]);
+            }
+        }
+        fprintf(fotmp, "\n");
+    }
+
     TrainModelThread((void *)(long long)0);// 0 线程id,单线程
 //    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
     fo = fopen(output_file, "wb");//判断参数是否有输出文件路径
