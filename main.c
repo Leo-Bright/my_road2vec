@@ -608,6 +608,7 @@ void *TrainModelThread(void *id) {
                 }
 
                 //Learn by same node type relationship
+
 //                target = node_seq[a];
 //                context = node_seq[a+w];
 //                mp_index = 0;
@@ -617,6 +618,7 @@ void *TrainModelThread(void *id) {
 //                    if (d == 0) {
 //                        label = 0;
 //                        if (node2type[target] == node2type[context]) label = 1;
+//                        if (node2type[target] == 1) label = 0;
 //                        // negative sampling
 //                    } else {
 //                        next_random = next_random * (unsigned long long)25214903917 + 11;
@@ -625,6 +627,7 @@ void *TrainModelThread(void *id) {
 //                        if (context == target || context == node_seq[a+w]) continue;
 //                        label = 0;
 //                        if (node2type[target] == node2type[context]) label = 1;
+//                        if (node2type[target] == 1) label = 0;
 //                    }
 //
 //                    // training of a data
