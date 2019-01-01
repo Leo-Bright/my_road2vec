@@ -31,12 +31,12 @@ struct vocab_mp{
 char train_file[MAX_STRING], output_file[MAX_STRING], mp_output_file[MAX_STRING], type_file[MAX_STRING];
 struct vocab_word *vocab;
 struct vocab_mp *mp_vocab;
-int binary = 0, debug_mode = 2, window = 3, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1;
+int binary = 0, debug_mode = 2, window = 3, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1, iteration = 1;
 int sigmoid_reg = 0;
 int *vocab_hash, *mp_vocab_hash, *node2type;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 64;
 long long mp_vocab_max_size = 1000, mp_vocab_size = 0;
-long long train_words = 0, word_count_actual = 0, file_size = 0, classes = 0;
+long long train_words = 0, file_size = 0;
 long long train_mps = 0;
 real alpha = 0.025, starting_alpha;
 real beta = 0.9;
@@ -429,7 +429,7 @@ void *TrainModelThread(void *id) {
     long long rw_length = 0;
     char item[MAX_STRING];
     char rw[MAX_RW_LENGTH][MAX_STRING], edge_seq[MAX_RW_LENGTH][MAX_STRING];
-    long long word_count = 0, last_word_count = 0;
+    long long word_count = 0, last_word_count = 0, word_count_actual = 0;
     long long node_seq[MAX_RW_LENGTH];
     long long edge_count = 0;
     long long lx, ly, lr, c, target, context, label;
@@ -465,7 +465,7 @@ void *TrainModelThread(void *id) {
                        word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
                 fflush(stdout);
             }
-            alpha = starting_alpha * (1 - word_count_actual / (real)(train_words + 1));
+            alpha = alpha * (1 - word_count_actual / (real)(train_words + 1) / iteration);
             if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
         }
         for(int i= sizeof(item);i>=0;i--) item[i]='\0'; //清空操作，为保证node id读取不会错乱（原因：node ID位数不同）
@@ -712,32 +712,40 @@ void TrainModel() {
 //            return ;
 //        }
 //    }
-    printf("\nsave tmp node vectors\n");
-    FILE *fotmp;
-    fotmp = fopen("../node2vec_tmp.txt", "wb");//判断参数是否有输出文件路径
-    if (fotmp == NULL) {
-        fprintf(stderr, "Cannot open output_tmp: permission denied\n");
-        exit(1);
-    }
-    fprintf(fotmp, "%lld %lld\n", vocab_size, layer1_size);
-    for (long a = 0; a < vocab_size; a++) { //保存 node embedding
-        if (vocab[a].word != NULL) {
-            fprintf(fotmp, "%s ", vocab[a].word);
+    for(int i=0;i<iteration;i++){
+        printf("\nTraining in iteration:%d",i+1);
+        printf("\nsave tmp node vectors\n");
+        FILE *fotmp;
+        if(i==0){
+            fotmp = fopen("../node2vec_tmp0.txt", "wb");//判断参数是否有输出文件路径
+        }else if(i==10){
+            fotmp = fopen("../node2vec_tmp1.txt", "wb");//判断参数是否有输出文件路径
+        } else{
+            fotmp = fopen("../node2vec_tmp.txt", "wb");//判断参数是否有输出文件路径
         }
-        if (binary){
-            for (long b = 0; b < layer1_size; b++) {
-                fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fotmp);
+        if (fotmp == NULL) {
+            fprintf(stderr, "Cannot open output_tmp: permission denied\n");
+            exit(1);
+        }
+        fprintf(fotmp, "%lld %lld\n", vocab_size, layer1_size);
+        for (long a = 0; a < vocab_size; a++) { //保存 node embedding
+            if (vocab[a].word != NULL) {
+                fprintf(fotmp, "%s ", vocab[a].word);
             }
-        }
-        else {
-            for (long b = 0; b < layer1_size; b++) {
-                fprintf(fotmp, "%lf ", syn0[a * layer1_size + b]);
+            if (binary){
+                for (long b = 0; b < layer1_size; b++) {
+                    fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fotmp);
+                }
             }
+            else {
+                for (long b = 0; b < layer1_size; b++) {
+                    fprintf(fotmp, "%lf ", syn0[a * layer1_size + b]);
+                }
+            }
+            fprintf(fotmp, "\n");
         }
-        fprintf(fotmp, "\n");
+        TrainModelThread((void *)(long long)0);// 0 线程id,单线程
     }
-
-    TrainModelThread((void *)(long long)0);// 0 线程id,单线程
 //    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
     fo = fopen(output_file, "wb");//判断参数是否有输出文件路径
     if (fo == NULL) {
@@ -825,6 +833,8 @@ int main(int argc, char **argv) {
         printf("\t\tUse <int> threads (default 1)\n");
         printf("\t-sigmoid_reg <1/0>\n");
         printf("\t\tSet to use sigmoid function for regularization (default 0: use binary-step function)\n");
+        printf("\t-iteration <int>\n");
+        printf("\t\tSet iteration numbers.(default 1: only train one time))\n");
         printf("\t-no_circle <1/0>\n");
         printf("\t\tSet to agoid circles in paths when preparing training data (default 1: avoid)\n");
         printf("\nExamples:\n");
@@ -844,6 +854,7 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-no_circle", argc, argv)) > 0) no_circle = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-sigmoid_reg", argc, argv)) > 0) sigmoid_reg = atoi(argv[i + 1]);
+    if ((i = ArgPos((char *)"-iteration", argc, argv)) > 0) iteration = atoi(argv[i + 1]);
 
     vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
     vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
