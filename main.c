@@ -38,7 +38,7 @@ long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 64;
 long long mp_vocab_max_size = 1000, mp_vocab_size = 0;
 long long train_words = 0, file_size = 0;
 long long train_mps = 0;
-real alpha = 0.025, starting_alpha;
+real alpha = 0.025, starting_alpha, last_alpha = 0;
 real beta = 0.9;
 real *syn0, *syn1neg, *synmp, *expTable;
 clock_t start;
@@ -465,7 +465,7 @@ void *TrainModelThread(void *id) {
                        word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
                 fflush(stdout);
             }
-            alpha = alpha * (1 - word_count_actual / (real)(train_words + 1) / iteration);
+            alpha = last_alpha * (1 - (word_count_actual / (real)(train_words + 1) / iteration));
             if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
         }
         for(int i= sizeof(item);i>=0;i--) item[i]='\0'; //清空操作，为保证node id读取不会错乱（原因：node ID位数不同）
@@ -685,6 +685,7 @@ void *TrainModelThread(void *id) {
             }
         }
     }
+    last_alpha = alpha;
     fclose(fi);
     free(ex);
     free(er);
@@ -700,6 +701,7 @@ void TrainModel() {
 //    }
     printf("Starting training using file %s\n", train_file); //node sequence
     starting_alpha = alpha;
+    last_alpha = alpha;
     LearnVocabFromTrainFile(); // 从输入的node sequence 里提取node的信息
     LearnMpVocabFromTrainFile();//
     LoadTypeFromTypeFile();//提取node type
