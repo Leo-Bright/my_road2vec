@@ -31,7 +31,7 @@ struct vocab_mp{
 char train_file[MAX_STRING], output_file[MAX_STRING], mp_output_file[MAX_STRING], type_file[MAX_STRING];
 struct vocab_word *vocab;
 struct vocab_mp *mp_vocab;
-int binary = 0, debug_mode = 2, window = 5, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1, iteration = 1;
+int binary = 0, debug_mode = 2, window = 5, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1;
 int sigmoid_reg = 0;
 int *vocab_hash, *mp_vocab_hash, *node2type;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 64;
@@ -436,8 +436,6 @@ void *TrainModelThread(void *id) {
     unsigned long long next_random = (long long)id;
     real f, g;
     clock_t now;
-//real *neu1 = (real *)calloc(layer1_size, sizeof(real));
-//real *neu1e = (real *)calloc(layer1_size, sizeof(real));
     real *ex = (real *)calloc(layer1_size, sizeof(real));
     real *er = (real *)calloc(layer1_size, sizeof(real));
     real sigmoid = 0;
@@ -448,11 +446,9 @@ void *TrainModelThread(void *id) {
         fprintf(stderr, "no such file or directory: %s", train_file);
         exit(1);
     }
+    printf("File total size:%lld, Pid is:%lld, file_position:%lld \n",file_size, (long long)id, file_size / (long long)num_threads * (long long)id);
     fseek(fi, file_size / (long long)num_threads * (long long)id, SEEK_SET); //多线程读文件的位置定位 （id为是线程id）
-//    printf("id is :%lld \n", (long long)id);
-//    printf("file size is :%lld \n", file_size);
-//    printf("num_threads is :%d \n", num_threads);
-//    printf("file_size/num_threads * id == %lld \n", file_size / (long long)num_threads * (long long)id);
+
     while (1) {
         if (word_count - last_word_count > 10000) {
             word_count_actual += word_count - last_word_count;
@@ -460,12 +456,12 @@ void *TrainModelThread(void *id) {
             if ((debug_mode > 1)) {
                 now=clock();
                 printf("%cAlpha: %f  Progress(%lld/%lld): %.2f%%  Words/thread/sec: %.2fk", 13, alpha,
-                       word_count, train_words,
-                       word_count_actual / (real)(train_words + 1) * 100,
+                       word_count, train_words / num_threads,
+                       word_count_actual / (real)((train_words + 1) / num_threads) * 100,
                        word_count_actual / ((real)(now - start + 1) / (real)CLOCKS_PER_SEC * 1000));
                 fflush(stdout);
             }
-            alpha = last_alpha * (1 - (word_count_actual / (real)(train_words + 1) / iteration));
+            alpha = last_alpha * (1 - (word_count_actual / (real)(train_words + 1)));
             if (alpha < starting_alpha * 0.0001) alpha = starting_alpha * 0.0001;
         }
         for(int i= sizeof(item);i>=0;i--) item[i]='\0'; //清空操作，为保证node id读取不会错乱（原因：node ID位数不同）
@@ -476,7 +472,7 @@ void *TrainModelThread(void *id) {
             while (1) {
                 ReadWord(item, fi);
                 if (feof(fi)) {
-                    printf("tmp_walk_fname is end! \n");
+                    printf("walk_fname is end! \n");
                     break;
                 }
                 if (strcmp(item, "\n") == 0) {
@@ -694,11 +690,11 @@ void *TrainModelThread(void *id) {
 
 void TrainModel() {
     FILE *fo, *fo_mp;
-//    pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
-//    if (pt == NULL) {
-//        fprintf(stderr, "cannot allocate memory for threads\n");
-//        exit(1);
-//    }
+    pthread_t *pt = (pthread_t *)malloc(num_threads * sizeof(pthread_t));
+    if (pt == NULL) {
+        fprintf(stderr, "cannot allocate memory for threads\n");
+        exit(1);
+    }
     printf("Starting training using file %s\n", train_file); //node sequence
     starting_alpha = alpha;
     last_alpha = alpha;
@@ -709,49 +705,17 @@ void TrainModel() {
     InitNet();
     InitUnigramTable(); //一元表，负采样
     start = clock();
-//    for (a = 0; a < num_threads; a++){
-//        printf("a value is %d\n", a);
-//        int err = pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
-//        if(err != 0){
-//            printf("can't create thread: %s\n",strerror(err));
-//            return ;
-//        }
-//    }
-    for(int i=0;i<iteration;i++){
-        printf("\nTraining in iteration:%d",i+1);
-        printf("\nsave tmp node vectors\n");
-        FILE *fotmp;
-        if(i==0){
-            fotmp = fopen("../node2vec_tmp0.txt", "wb");//判断参数是否有输出文件路径
-        }else if(i==10){
-            fotmp = fopen("../node2vec_tmp1.txt", "wb");//判断参数是否有输出文件路径
-        } else{
-            fotmp = fopen("../node2vec_tmp.txt", "wb");//判断参数是否有输出文件路径
+    for (long long a = 0; a < num_threads; a++){
+        printf("a value is %d\n", a);
+        int err = pthread_create(&pt[a], NULL, TrainModelThread, (void *)a);
+        if(err != 0){
+            printf("can't create thread: %s\n",strerror(err));
+            return ;
         }
-        if (fotmp == NULL) {
-            fprintf(stderr, "Cannot open output_tmp: permission denied\n");
-            exit(1);
-        }
-        fprintf(fotmp, "%lld %lld\n", vocab_size, layer1_size);
-        for (long a = 0; a < vocab_size; a++) { //保存 node embedding
-            if (vocab[a].word != NULL) {
-                fprintf(fotmp, "%s ", vocab[a].word);
-            }
-            if (binary){
-                for (long b = 0; b < layer1_size; b++) {
-                    fwrite(&syn0[a * layer1_size + b], sizeof(real), 1, fotmp);
-                }
-            }
-            else {
-                for (long b = 0; b < layer1_size; b++) {
-                    fprintf(fotmp, "%lf ", syn0[a * layer1_size + b]);
-                }
-            }
-            fprintf(fotmp, "\n");
-        }
-        TrainModelThread((void *)(long long)0);// 0 线程id,单线程
     }
-//    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
+//    TrainModelThread((void *)(long long)0);// 0 线程id,单线程
+
+    for (long a = 0; a < num_threads; a++) pthread_join(pt[a], NULL);
     fo = fopen(output_file, "wb");//判断参数是否有输出文件路径
     if (fo == NULL) {
         fprintf(stderr, "Cannot open %s: permission denied\n", output_file);
@@ -794,7 +758,7 @@ void TrainModel() {
     fclose(fo);
     fclose(fo_mp);
     free(table);
-//    free(pt);
+    free(pt);
     DestroyVocab();
 }
 
@@ -838,8 +802,6 @@ int main(int argc, char **argv) {
         printf("\t\tUse <int> threads (default 1)\n");
         printf("\t-sigmoid_reg <1/0>\n");
         printf("\t\tSet to use sigmoid function for regularization (default 0: use binary-step function)\n");
-        printf("\t-iteration <int>\n");
-        printf("\t\tSet iteration numbers.(default 1: only train one time))\n");
         printf("\t-no_circle <1/0>\n");
         printf("\t\tSet to agoid circles in paths when preparing training data (default 1: avoid)\n");
         printf("\nExamples:\n");
@@ -859,7 +821,6 @@ int main(int argc, char **argv) {
     if ((i = ArgPos((char *)"-threads", argc, argv)) > 0) num_threads = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-no_circle", argc, argv)) > 0) no_circle = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-sigmoid_reg", argc, argv)) > 0) sigmoid_reg = atoi(argv[i + 1]);
-    if ((i = ArgPos((char *)"-iteration", argc, argv)) > 0) iteration = atoi(argv[i + 1]);
 
     vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
     vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
