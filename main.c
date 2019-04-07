@@ -28,12 +28,12 @@ struct vocab_mp{
     char *mp, *code, codelen, *inverse_mp;
 };
 
-char train_file[MAX_STRING], output_file[MAX_STRING], mp_output_file[MAX_STRING], type_file[MAX_STRING];
+char train_file[MAX_STRING], output_file[MAX_STRING], mp_output_file[MAX_STRING], type_file[MAX_STRING], tag_file[MAX_STRING];
 struct vocab_word *vocab;
 struct vocab_mp *mp_vocab;
 int binary = 0, debug_mode = 2, window = 5, num_threads = 1, is_deepwalk = 1, no_circle = 1, static_win = 1;
 int sigmoid_reg = 0;
-int *vocab_hash, *mp_vocab_hash, *node2type;
+int *vocab_hash, *mp_vocab_hash, *node2type, *node2tag;
 long long vocab_max_size = 1000, vocab_size = 0, layer1_size = 64;
 long long mp_vocab_max_size = 1000, mp_vocab_size = 0;
 long long train_words = 0, file_size = 0;
@@ -395,6 +395,33 @@ void LoadTypeFromTypeFile() {
     fclose(fin);
 }
 
+void LoadTagFromTagFile() {
+    char word[MAX_STRING];
+    char tag[MAX_STRING];
+    FILE *fin;
+    int i;
+    for (long long a = 0; a < vocab_hash_size; a++) node2tag[a] = -1;
+    fin = fopen(tag_file, "rb");
+    if (fin == NULL) {
+        printf("ERROR: tag data file (%s) not found!\n", tag_file);
+        exit(1);
+    }
+    while (1) {
+        ReadWord(word, fin);
+        if (feof(fin)) {
+            break;
+        }
+        if (strcmp(word, "\n") == 0) {
+            continue;
+        }
+        ReadWord(tag, fin);
+        i = SearchVocab(word);
+        node2tag[i] = atoi(tag);
+//        printf("node:%s(%d) type:%d\n", word, i, atoi(type));
+    }
+    fclose(fin);
+}
+
 void InitNet() {
     posix_memalign((void **)&syn0, 128, (long long)vocab_size * layer1_size * sizeof(real));//syn0：存储wx权重矩阵
     if (syn0 == NULL) {printf("Memory allocation failed\n"); exit(1);}
@@ -613,8 +640,9 @@ void *TrainModelThread(void *id) {
                 for (d = 0; d < negative + 1; d++) {
                     if (d == 0) {
                         label = 0;
-                        if (node2type[target] == node2type[context]) label = 1;
                         if (node2type[target] == 1) label = 0;
+                        else if (node2type[target] == node2type[context]) label += 0.5;
+                        if (node2tag[target] == node2tag[context]) label += 0.5;
                         // negative sampling
                     } else {
                         next_random = next_random * (unsigned long long)25214903917 + 11;
@@ -622,8 +650,9 @@ void *TrainModelThread(void *id) {
                         if (context == 0) context = next_random % (vocab_size - 1) + 1;
                         if (context == target || context == node_seq[a+w]) continue;
                         label = 0;
-                        if (node2type[target] == node2type[context]) label = 1;
                         if (node2type[target] == 1) label = 0;
+                        else if (node2type[target] == node2type[context]) label += 0.5;
+                        if (node2tag[target] == node2tag[context]) label += 0.5;
                     }
 
                     // training of a data
@@ -701,6 +730,7 @@ void TrainModel() {
     LearnVocabFromTrainFile(); // 从输入的node sequence 里提取node的信息
     LearnMpVocabFromTrainFile();//
     LoadTypeFromTypeFile();//提取node type
+    LoadTagFromTagFile();//提取node tag
     if (output_file[0] == 0) return;
     InitNet();
     InitUnigramTable(); //一元表，负采样
@@ -786,6 +816,8 @@ int main(int argc, char **argv) {
         printf("\t\tUse text data from <file> to train the model, format of line is '<node_id> <edge_class>'\n");
         printf("\t-type_file <file>\n");
         printf("\t\tNode type file, format of line is '<node_id> <node_type>'\n");
+        printf("\t-tag_file <file>\n");
+        printf("\t\tNode tag file, format of line is '<node_id> <node_tag>'\n");
         printf("\t-alpha <float>\n");
         printf("\t\tSet the starting learning rate; default is 0.025\n");
         printf("\t-beta <float>\n");
@@ -805,13 +837,14 @@ int main(int argc, char **argv) {
         printf("\t-no_circle <1/0>\n");
         printf("\t\tSet to agoid circles in paths when preparing training data (default 1: avoid)\n");
         printf("\nExamples:\n");
-        printf("./road2vec -train data.txt -type_file tyep.txt -output vec.txt -output_mp mp.txt -size 128 -window 5 -negative 5\n\n");
+        printf("./road2vec -train data.txt -type_file type.txt -tag_file tag.txt -output vec.txt -output_mp mp.txt -size 128 -window 5 -negative 5\n\n");
         return 0;
     }
     output_file[0] = 0;
     if ((i = ArgPos((char *)"-size", argc, argv)) > 0) layer1_size = atoi(argv[i + 1]);
     if ((i = ArgPos((char *)"-train", argc, argv)) > 0) strcpy(train_file, argv[i + 1]);
     if ((i = ArgPos((char *)"-type_file", argc, argv)) > 0) strcpy(type_file, argv[i + 1]);
+    if ((i = ArgPos((char *)"-tag_file", argc, argv)) > 0) strcpy(tag_file, argv[i + 1]);
     if ((i = ArgPos((char *)"-alpha", argc, argv)) > 0) alpha = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-beta", argc, argv)) > 0) beta = atof(argv[i + 1]);
     if ((i = ArgPos((char *)"-output", argc, argv)) > 0) strcpy(output_file, argv[i + 1]);
@@ -825,6 +858,7 @@ int main(int argc, char **argv) {
     vocab = (struct vocab_word *)calloc(vocab_max_size, sizeof(struct vocab_word));
     vocab_hash = (int *)calloc(vocab_hash_size, sizeof(int));
     node2type = (int *)calloc(vocab_hash_size, sizeof(int));
+    node2tag = (int *)calloc(vocab_hash_size, sizeof(int));
     mp_vocab = (struct vocab_mp*)calloc(mp_vocab_max_size, sizeof(struct vocab_mp));
     mp_vocab_hash = (int *)calloc(mp_vocab_hash_size, sizeof(int));
 
@@ -843,6 +877,7 @@ int main(int argc, char **argv) {
     free(vocab_hash);
     free(mp_vocab_hash);
     free(node2type);
+    free(node2tag);
     free(expTable);
     return 0;
 }
